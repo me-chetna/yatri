@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Loader2, RotateCcw, Upload, Clock } from "lucide-react";
 import { SideNav } from "../../components/SideNav";
+import { TIMELINE_WONDERS, TIMELINE_WONDERS_IMAGES } from "../../data/timeline-data";
 import {
   identifyMonument,
   getMonumentTimeline,
@@ -10,6 +11,21 @@ import {
   type TimelineEra,
   type IdentificationResult
 } from "./actions";
+
+/**
+ * Robust helper to map recognized monument names back to our 7 curated wonders
+ */
+function findStaticWonderId(name: string): string | null {
+  const norm = name.toLowerCase().trim();
+  if (norm.includes("great wall")) return "great_wall";
+  if (norm.includes("petra")) return "petra";
+  if (norm.includes("colosseum") || norm.includes("coliseum")) return "colosseum";
+  if (norm.includes("machu picchu")) return "machu_picchu";
+  if (norm.includes("chichen") || norm.includes("itza")) return "chichen_itza";
+  if (norm.includes("taj mahal")) return "taj_mahal";
+  if (norm.includes("christ") || norm.includes("redeemer") || norm.includes("corcovado")) return "christ_redeemer";
+  return null;
+}
 
 export default function TimelineClient() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -67,6 +83,7 @@ export default function TimelineClient() {
     setSnapshot(dataUrl);
     setIdentified(null);
     setEras(null);
+    setEraImages({}); // Clear old image caching before running identification
     setBusy("identifying");
     try {
       const res = await identifyMonument(dataUrl);
@@ -78,7 +95,29 @@ export default function TimelineClient() {
         setBusy("idle");
         return;
       }
+      
       setBusy("timeline");
+
+      // Check if the monument matches one of our 7 static wonders
+      const staticId = findStaticWonderId(res.name);
+      if (staticId) {
+        const staticWonder = TIMELINE_WONDERS.find((w) => w.id === staticId);
+        if (staticWonder) {
+          // Immediately load pre-defined historical timeline eras
+          setEras(staticWonder.eras);
+          const latest = staticWonder.eras[staticWonder.eras.length - 1]?.year ?? 2026;
+          setYear(latest);
+          
+          // Seed the images cache immediately from data file to skip AI rendering triggers
+          const imagesForWonder = TIMELINE_WONDERS_IMAGES[staticId] || {};
+          setEraImages(imagesForWonder);
+          
+          setBusy("idle");
+          return;
+        }
+      }
+
+      // Fallback: Dynamic AI generation if it's a completely different monument
       const tl = await getMonumentTimeline(res.name);
       setEras(tl.eras);
       const latest = tl.eras[tl.eras.length - 1]?.year ?? 2026;
@@ -138,7 +177,14 @@ export default function TimelineClient() {
 
   useEffect(() => {
     if (!identified || !activeEra) return;
+    
+    // Skip if we already have the image (either from TIMELINE_WONDERS_IMAGES or already generated)
     if (eraImages[activeEra.year]) return;
+
+    // Do not call generateEraImage if this is a static, curated wonder (safety net)
+    const staticId = findStaticWonderId(identified.name);
+    if (staticId) return;
+
     let cancelled = false;
     setEraImgLoading(true);
     generateEraImage(identified.name, activeEra.year, activeEra.appearance)

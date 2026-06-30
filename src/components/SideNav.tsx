@@ -17,11 +17,11 @@ import {
 
 const items = [
   { icon: Compass, label: "Explore", to: "/" },
-  { icon: Map, label: "My Trips", to: "/trips" },
-  { icon: Clock, label: "Timeline", to: "/timeline" },
   { icon: Boxes, label: "7 wonder", to: "/monument-3d" },
   { icon: Apple, label: "Food Scan", to: "/food-scan" },
+  { icon: Clock, label: "Timeline", to: "/timeline" },
   { icon: MessageCircle, label: "Ask Yatri", to: "/chatbot" },
+  { icon: Map, label: "My Trips", to: "/trips" },
   { icon: User, label: "Profile", to: "/profile" },
 ];
 
