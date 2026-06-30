@@ -12,9 +12,6 @@ import {
   type IdentificationResult
 } from "./actions";
 
-/**
- * Robust helper to map recognized monument names back to our 7 curated wonders
- */
 function findStaticWonderId(name: string): string | null {
   const norm = name.toLowerCase().trim();
   if (norm.includes("great wall")) return "great_wall";
