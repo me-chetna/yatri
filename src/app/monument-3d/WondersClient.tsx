@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { 
   Globe, 
   X, 
@@ -17,12 +17,12 @@ import { WONDERS, type WonderData, type CultureTopic } from "../../data/monument
 import { getMonumentCulture, type CultureInfo, type TopicData } from "./actions";
 
 const TOPIC_META: Record<CultureTopic, { label: string; color: string }> = {
-  history: { label: "History",           color: "#60a5fa" },
-  past:    { label: "Legends",           color: "#a78bfa" },
-  culture: { label: "Culture",           color: "#f472b6" },
-  cuisine: { label: "Cuisine",           color: "#fb923c" },
-  food:    { label: "Signature Food",   color: "#facc15" },
-  dance:   { label: "Dance",            color: "#34d399" },
+  history: { label: "History",        color: "#60a5fa" },
+  past:    { label: "Legends",        color: "#a78bfa" },
+  culture: { label: "Culture",        color: "#f472b6" },
+  cuisine: { label: "Cuisine",        color: "#fb923c" },
+  food:    { label: "Signature Food", color: "#facc15" },
+  dance:   { label: "Dance",          color: "#34d399" },
   dress:   { label: "Traditional Dress",color: "#22d3ee" },
 };
 
@@ -71,10 +71,16 @@ function ImageModal({ imageUrl, imageAlt, onClose }: {
   );
 }
 
-function VideoPlayer({ wonder, videoUrl }: { wonder: WonderData | CultureInfo; videoUrl?: string }) {
+/* ── Updated VideoPlayer accepts a `isMuted` prop ── */
+function VideoPlayer({ wonder, videoUrl, isMuted }: { 
+  wonder: WonderData | CultureInfo; 
+  videoUrl?: string;
+  isMuted: boolean;
+}) {
   const isCustom = !('videoUrl' in wonder);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   
-  // Detect if videoUrl is a local asset
   const isLocalVideo = useMemo(() => {
     if (!videoUrl) return false;
     return (
@@ -85,22 +91,40 @@ function VideoPlayer({ wonder, videoUrl }: { wonder: WonderData | CultureInfo; v
     );
   }, [videoUrl]);
 
-  // Append parameters to YouTube videos to force muted autoplay and hide controls
+  // Handle local video muting
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
+  // Handle YouTube iframe muting using the postMessage API
+  useEffect(() => {
+    if (!isLocalVideo && iframeRef.current && iframeRef.current.contentWindow) {
+      const command = isMuted ? 'mute' : 'unMute';
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ event: 'command', func: command, args: [] }), 
+        '*'
+      );
+    }
+  }, [isMuted, isLocalVideo]);
+
+  // We append enablejsapi=1 so we can mute/unmute it programmatically later
   const processedVideoUrl = useMemo(() => {
     if (!videoUrl || isLocalVideo) return videoUrl;
     try {
       const url = new URL(videoUrl);
       url.searchParams.set("controls", "0");
-      url.searchParams.set("mute", "1");
       url.searchParams.set("autoplay", "1");
       url.searchParams.set("loop", "1");
+      url.searchParams.set("enablejsapi", "1");
       return url.toString();
     } catch {
       const separator = videoUrl.includes("?") ? "&" : "?";
       let res = videoUrl;
       if (!res.includes("controls=")) res += `${separator}controls=0`;
-      if (!res.includes("mute=")) res += `&mute=1`;
       if (!res.includes("autoplay=")) res += `&autoplay=1`;
+      if (!res.includes("enablejsapi=")) res += `&enablejsapi=1`;
       return res;
     }
   }, [videoUrl, isLocalVideo]);
@@ -116,16 +140,17 @@ function VideoPlayer({ wonder, videoUrl }: { wonder: WonderData | CultureInfo; v
           />
         ) : isLocalVideo ? (
           <video
+            ref={videoRef}
             key={wonder.id}
             src={videoUrl}
             autoPlay
-            muted
             loop
             playsInline
             className="h-full w-full object-cover pointer-events-none"
           />
         ) : (
           <iframe
+            ref={iframeRef}
             key={wonder.id}
             src={processedVideoUrl}
             title={`${wonder.name} video`}
@@ -150,7 +175,6 @@ export default function WondersPage() {
   const [voiceReady, setVoiceReady] = useState(false);
   const [imageModal, setImageModal] = useState<{ url: string; alt: string } | null>(null);
   
-  // Custom AI Search States
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingCustom, setLoadingCustom] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,7 +225,6 @@ export default function WondersPage() {
     stopSpeak(); 
   };
 
-  // Perform dynamic AI query using the Next.js Server Action
   async function handleAISearch(e: React.FormEvent) {
     e.preventDefault();
     if (!searchQuery.trim() || loadingCustom) return;
@@ -298,8 +321,12 @@ export default function WondersPage() {
 
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
 
-          {/* ── Visual Media Player ── */}
-          <VideoPlayer wonder={wonder} videoUrl={isCustom ? undefined : (wonder as WonderData).videoUrl} />
+          {/* ── Visual Media Player (Now synced to "speaking" state) ── */}
+          <VideoPlayer 
+            wonder={wonder} 
+            videoUrl={isCustom ? undefined : (wonder as WonderData).videoUrl} 
+            isMuted={speaking} 
+          />
 
           {/* ── Guide Panel ── */}
           <div className="flex flex-col gap-4">

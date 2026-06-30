@@ -13,10 +13,12 @@ import {
   User,
   Menu,
   X,
+  Sparkles, // <-- New icon added for the quiz matchmaking system
 } from "lucide-react";
 
 const items = [
   { icon: Compass, label: "Explore", to: "/" },
+  { icon: Sparkles, label: "Matchmaker", to: "/quiz" },
   { icon: Boxes, label: "7 wonder", to: "/monument-3d" },
   { icon: Apple, label: "Food Scan", to: "/food-scan" },
   { icon: Clock, label: "Timeline", to: "/timeline" },
@@ -52,7 +54,7 @@ export function SideNav() {
       <div
         className={`flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-full bg-ink px-2 shadow-[0_18px_40px_-16px_rgba(40,20,10,0.5)] transition-all duration-500 ease-[cubic-bezier(.22,1,.36,1)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-none dark:bg-card dark:border dark:border-border ${
           open
-            ? "max-w-[640px] py-2 opacity-100"
+            ? "max-w-[720px] py-2 opacity-100" // Slightly expanded max-w to handle the extra pill item beautifully
             : "pointer-events-none max-w-0 px-0 py-0 opacity-0"
         }`}
       >
