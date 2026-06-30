@@ -92,13 +92,13 @@ export const TIMELINE_WONDERS: StaticWonder[] = [
     region: "New Delhi",
     eras: [
       {
-        year: 1921,
+        year: 1931,
         title: "The Memorial Foundation",
         description: "The Duke of Connaught lays the foundation stone for the war memorial designed by Sir Edwin Lutyens, honoring 84,000 soldiers of the British Indian Army who died in WWI.",
         appearance: "A flat, grassy plain at the center of New Delhi's Rajpath, with horse carriages and early construction cranes setting up massive granite foundations."
       },
       {
-        year: 1931,
+        year: 1940,
         title: "The Kingsway Inauguration",
         description: "Viceroy Lord Irwin officially inaugurates the All India War Memorial, its beautiful sandstone archway standing as the focal point of the symmetrical city layout.",
         appearance: "A sharp, historic black-and-white print of the towering ceremonial arch standing proudly over a clean, paved Kingsway boulevard."
@@ -108,12 +108,6 @@ export const TIMELINE_WONDERS: StaticWonder[] = [
         title: "Amar Jawan Jyoti Commemoration",
         description: "Following the 1971 liberation war, Prime Minister Indira Gandhi inaugurates the Amar Jawan Jyoti — an eternal flame burning under the archway for fallen soldiers.",
         appearance: "A vintage color film view of the black marble pedestal and inverted rifle beneath the massive stone archway, with the eternal flame glowing brightly."
-      },
-      {
-        year: 2022,
-        title: "Kartavya Path Revamp",
-        description: "The Central Vista project completely transforms the surrounding lawns and path, installing the grand granite statue of Netaji Subhas Chandra Bose in the historic canopy.",
-        appearance: "Clean granite walkways and reflective water channels flanking India Gate, with a majestic black granite statue of Netaji under the cupola."
       },
       {
         year: 2026,
@@ -145,9 +139,9 @@ export const TIMELINE_WONDERS_IMAGES: Record<string, Record<number, string>> = {
     2026: "https://cdn.britannica.com/20/189820-050-D650A54D/Red-Fort-Old-Delhi-India.jpg"
   },
   india_gate: {
-    1921: "https://t3.ftcdn.net/jpg/00/64/01/76/360_F_64017651_wYll2mTJh8zNVj7mK6Do0gZO09X0Ezq0.jpg",
-    1931: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSbn28oOYtHrL5zQ1tkJft2zan9A_clTRQxDVmusLkylCYmjZarz0zn2D69&s=10",
-    1947: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTkh54IyPedQdYDKd4NFtJkXg3L4S75O08CH0E_lbN0bojxrdT52E3InjcN&s=10",
+    1931: "https://media.licdn.com/dms/image/v2/D5622AQGeVeLKAQSBLA/feedshare-shrink_800/feedshare-shrink_800/0/1706274650397?e=2147483647&v=beta&t=1pULVeMyIF8RbwiUnyIdv9277BkTbLXxGYAfmsYCVFI",
+    1940: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSbn28oOYtHrL5zQ1tkJft2zan9A_clTRQxDVmusLkylCYmjZarz0zn2D69&s=10",
+    1972: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTkh54IyPedQdYDKd4NFtJkXg3L4S75O08CH0E_lbN0bojxrdT52E3InjcN&s=10",
     2026: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRUPZazQsLao1GdDbGYWmC0V2cjmvsyY7vsx1HbQmrj6w&s"
   },
 };

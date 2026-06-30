@@ -14,19 +14,15 @@ import {
 
 function findStaticWonderId(name: string): string | null {
   const norm = name.toLowerCase().trim();
-  if (norm.includes("great wall")) return "great_wall";
-  if (norm.includes("petra")) return "petra";
-  if (norm.includes("colosseum") || norm.includes("coliseum")) return "colosseum";
-  if (norm.includes("machu picchu")) return "machu_picchu";
-  if (norm.includes("chichen") || norm.includes("itza")) return "chichen_itza";
-  if (norm.includes("taj mahal")) return "taj_mahal";
-  if (norm.includes("christ") || norm.includes("redeemer") || norm.includes("corcovado")) return "christ_redeemer";
+  if (norm.includes("red fort") || norm.includes("lal qila") || norm.includes("lal quila")) return "red_fort";
+  if (norm.includes("india gate")) return "india_gate";
   return null;
 }
 
 export default function TimelineClient() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null); // Keep a persistent mutable reference to active track stream
   const [streaming, setStreaming] = useState(false);
   const [busy, setBusy] = useState<"idle" | "identifying" | "timeline">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -37,27 +33,39 @@ export default function TimelineClient() {
   const [eraImages, setEraImages] = useState<Record<number, string>>({});
   const [eraImgLoading, setEraImgLoading] = useState(false);
 
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          setStreaming(true);
-        }
-      } catch (e) {
-        setError(
-          "Camera unavailable. You can still upload a photo of any monument."
-        );
+  // Reusable camera activation sequence logic
+  const startCamera = async () => {
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
       }
-    })();
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      });
+      
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setStreaming(true);
+      }
+    } catch (e) {
+      setError(
+        "Camera unavailable. Give the permission or reset your camera."
+      );
+      setStreaming(false);
+    }
+  };
+
+  useEffect(() => {
+    startCamera();
     return () => {
-      stream?.getTracks().forEach((t) => t.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
     };
   }, []);
 
@@ -80,8 +88,15 @@ export default function TimelineClient() {
     setSnapshot(dataUrl);
     setIdentified(null);
     setEras(null);
-    setEraImages({}); // Clear old image caching before running identification
+    setEraImages({}); 
     setBusy("identifying");
+
+    // Stop camera tracks immediately during active analysis phases to conserve client processing power
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      setStreaming(false);
+    }
+
     try {
       const res = await identifyMonument(dataUrl);
       setIdentified(res);
@@ -95,17 +110,14 @@ export default function TimelineClient() {
       
       setBusy("timeline");
 
-      // Check if the monument matches one of our 7 static wonders
       const staticId = findStaticWonderId(res.name);
       if (staticId) {
         const staticWonder = TIMELINE_WONDERS.find((w) => w.id === staticId);
         if (staticWonder) {
-          // Immediately load pre-defined historical timeline eras
           setEras(staticWonder.eras);
           const latest = staticWonder.eras[staticWonder.eras.length - 1]?.year ?? 2026;
           setYear(latest);
           
-          // Seed the images cache immediately from data file to skip AI rendering triggers
           const imagesForWonder = TIMELINE_WONDERS_IMAGES[staticId] || {};
           setEraImages(imagesForWonder);
           
@@ -114,7 +126,6 @@ export default function TimelineClient() {
         }
       }
 
-      // Fallback: Dynamic AI generation if it's a completely different monument
       const tl = await getMonumentTimeline(res.name);
       setEras(tl.eras);
       const latest = tl.eras[tl.eras.length - 1]?.year ?? 2026;
@@ -145,6 +156,7 @@ export default function TimelineClient() {
     reader.readAsDataURL(file);
   };
 
+  // Fixed Reset handles rolling data mutations AND triggers immediate hardware track re-pooling 
   const reset = () => {
     setSnapshot(null);
     setIdentified(null);
@@ -152,6 +164,11 @@ export default function TimelineClient() {
     setError(null);
     setBusy("idle");
     setEraImages({});
+    
+    // Asynchronously wake hardware device layer context back up instantly
+    setTimeout(() => {
+      startCamera();
+    }, 50);
   };
 
   const activeEra = useMemo(() => {
@@ -174,11 +191,8 @@ export default function TimelineClient() {
 
   useEffect(() => {
     if (!identified || !activeEra) return;
-    
-    // Skip if we already have the image (either from TIMELINE_WONDERS_IMAGES or already generated)
     if (eraImages[activeEra.year]) return;
 
-    // Do not call generateEraImage if this is a static, curated wonder (safety net)
     const staticId = findStaticWonderId(identified.name);
     if (staticId) return;
 
@@ -289,7 +303,7 @@ export default function TimelineClient() {
                   onClick={reset}
                   className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
                 >
-                  <RotateCcw className="h-4 w-4" /> Try another
+                  <RotateCcw className="h-4 w-4" /> Try another (Scan Again)
                 </button>
               )}
               <input
@@ -317,7 +331,7 @@ export default function TimelineClient() {
                 <Clock className="mb-3 h-10 w-10 opacity-30" />
                 <p className="max-w-xs text-sm">
                   Capture a monument to unlock its living timeline — Taj Mahal,
-                  Hawa Mahal, Qutub Minar, India Gate and beyond.
+                  Red Fort, India Gate and beyond.
                 </p>
               </div>
             )}

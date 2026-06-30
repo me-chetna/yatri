@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Apple,
   Camera,
@@ -18,31 +18,45 @@ import { scanFoodItem, type FoodScanResult } from "./actions";
 export default function FoodScanClient() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null); // Persistent reference to hold the current media stream
   const [streaming, setStreaming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [result, setResult] = useState<FoodScanResult | null>(null);
 
-  useEffect(() => {
-    let stream: MediaStream | null = null;
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          setStreaming(true);
-        }
-      } catch {
-        setError("Camera unavailable. Upload a photo of the packaging instead.");
+  // Reusable camera initialization sequence
+  const startCamera = async () => {
+    try {
+      // Safely close out any existing open stream channels first
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
       }
-    })();
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      });
+      
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setStreaming(true);
+      }
+    } catch {
+      setError("Camera unavailable. Upload a photo of the packaging instead.");
+      setStreaming(false);
+    }
+  };
+
+  useEffect(() => {
+    startCamera();
     return () => {
-      stream?.getTracks().forEach((t) => t.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
     };
   }, []);
 
@@ -65,8 +79,14 @@ export default function FoodScanClient() {
     setSnapshot(dataUrl);
     setResult(null);
     setBusy(true);
+
+    // Stop active camera sensors immediately when analyzing to save mobile processing power
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      setStreaming(false);
+    }
+
     try {
-      // Execute standard Next.js Server Action directly
       const res = await scanFoodItem(dataUrl);
       setResult(res);
     } catch (e) {
@@ -92,11 +112,17 @@ export default function FoodScanClient() {
     reader.readAsDataURL(file);
   };
 
+  // Fixed Reset drops component states and forces immediate hardware streaming cycle
   const reset = () => {
     setSnapshot(null);
     setResult(null);
     setError(null);
     setBusy(false);
+    
+    // Tiny browser frame timeout safety window to allow DOM element unmounting
+    setTimeout(() => {
+      startCamera();
+    }, 50);
   };
 
   return (
