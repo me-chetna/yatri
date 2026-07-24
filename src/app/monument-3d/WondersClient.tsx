@@ -30,19 +30,23 @@ const TOPIC_ORDER: CultureTopic[] = [
   "history", "past", "culture", "cuisine", "food", "dance", "dress",
 ];
 
+// Reliable Voice Picker with fallback support
 function pickFemaleVoice(): SpeechSynthesisVoice | null {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
   const voices = window.speechSynthesis.getVoices();
-  if (!voices.length) return null;
+  if (!voices || voices.length === 0) return null;
+
   const preferred = [
-    /female/i, /zira/i, /samantha/i, /victoria/i, /tessa/i, /karen/i,
-    /google.*(uk|us).*english/i, /heera|priya|veena|aditi|raveena/i,
+    /samantha/i, /zira/i, /karen/i, /victoria/i, /tessa/i,
+    /heera|priya|veena|aditi|raveena/i, /female/i, /google.*(uk|us).*english/i,
   ];
+
   for (const re of preferred) {
     const v = voices.find((v) => re.test(v.name));
     if (v) return v;
   }
-  return voices.find((v) => v.lang.startsWith("en")) ?? voices[0];
+  
+  return voices.find((v) => v.lang.startsWith("en")) ?? voices[0] ?? null;
 }
 
 function ImageModal({ imageUrl, imageAlt, onClose }: {
@@ -71,7 +75,6 @@ function ImageModal({ imageUrl, imageAlt, onClose }: {
   );
 }
 
-/* ── Updated VideoPlayer accepts a `isMuted` prop ── */
 function VideoPlayer({ wonder, videoUrl, isMuted }: { 
   wonder: WonderData | CultureInfo; 
   videoUrl?: string;
@@ -91,14 +94,12 @@ function VideoPlayer({ wonder, videoUrl, isMuted }: {
     );
   }, [videoUrl]);
 
-  // Handle local video muting
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.muted = isMuted;
     }
   }, [isMuted]);
 
-  // Handle YouTube iframe muting using the postMessage API
   useEffect(() => {
     if (!isLocalVideo && iframeRef.current && iframeRef.current.contentWindow) {
       const command = isMuted ? 'mute' : 'unMute';
@@ -109,7 +110,6 @@ function VideoPlayer({ wonder, videoUrl, isMuted }: {
     }
   }, [isMuted, isLocalVideo]);
 
-  // We append enablejsapi=1 so we can mute/unmute it programmatically later
   const processedVideoUrl = useMemo(() => {
     if (!videoUrl || isLocalVideo) return videoUrl;
     try {
@@ -172,58 +172,99 @@ export default function WondersPage() {
   const [wonder, setWonder] = useState<WonderData | CultureInfo>(WONDERS[0]);
   const [activeTopic, setActiveTopic] = useState<CultureTopic | null>(null);
   const [speaking, setSpeaking] = useState(false);
-  const [voiceReady, setVoiceReady] = useState(false);
   const [imageModal, setImageModal] = useState<{ url: string; alt: string } | null>(null);
   
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingCustom, setLoadingCustom] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-useEffect(() => {
-  const unlockAudio = () => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      const emptyUtterance = new SpeechSynthesisUtterance("");
-      window.speechSynthesis.speak(emptyUtterance);
-    }
-    window.removeEventListener("touchstart", unlockAudio);
-    window.removeEventListener("click", unlockAudio);
-  };
+  // 1. Pre-warm voice synthesis engine & populate voices list
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
-  window.addEventListener("touchstart", unlockAudio);
-  window.addEventListener("click", unlockAudio);
-
-  return () => {
-    window.removeEventListener("touchstart", unlockAudio);
-    window.removeEventListener("click", unlockAudio);
-  };
-}, []);
-
-  const speak = (text: string) => {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  
-  window.speechSynthesis.cancel();
-
-  // Small timeout lets the WebView reset speech context properly
-  setTimeout(() => {
-    const u = new SpeechSynthesisUtterance(text);
-    const v = pickFemaleVoice();
-    if (v) u.voice = v;
-    
-    u.rate = 0.95;
-    u.pitch = 1.0;
-
-    u.onstart = () => setSpeaking(true);
-    u.onend = () => setSpeaking(false);
-    u.onerror = (e) => {
-      console.error("TTS Error:", e);
-      setSpeaking(false);
+    // Force voice list initialization
+    const loadVoices = () => {
+      window.speechSynthesis.getVoices();
     };
 
-    window.speechSynthesis.speak(u);
-  }, 50);
-};
+    loadVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    // iOS & Android WebView Audio Context Unlocker on First Touch/Click
+    const unlockAudio = () => {
+      if ("speechSynthesis" in window) {
+        const dummyUtterance = new SpeechSynthesisUtterance("");
+        dummyUtterance.volume = 0;
+        window.speechSynthesis.speak(dummyUtterance);
+      }
+      window.removeEventListener("touchstart", unlockAudio);
+      window.removeEventListener("click", unlockAudio);
+    };
+
+    window.addEventListener("touchstart", unlockAudio);
+    window.addEventListener("click", unlockAudio);
+
+    return () => {
+      window.removeEventListener("touchstart", unlockAudio);
+      window.removeEventListener("click", unlockAudio);
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  // 2. Stop speaking on wonder changes
+  useEffect(() => {
+    stopSpeak();
+    setActiveTopic(null);
+  }, [wonder]);
+
+  // Robust Speech Execution Function
+  const speak = (text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      console.warn("Speech Synthesis is not supported in this browser environment.");
+      return;
+    }
+
+    // Force stop any ongoing audio
+    window.speechSynthesis.cancel();
+
+    // Give browser/webview engine a 60ms tick to reset audio channel
+    setTimeout(() => {
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        const v = pickFemaleVoice();
+
+        if (v) {
+          u.voice = v;
+          u.lang = v.lang;
+        } else {
+          u.lang = "en-US";
+        }
+
+        u.rate = 0.95;
+        u.pitch = 1.05;
+        u.volume = 1.0;
+
+        u.onstart = () => setSpeaking(true);
+        u.onend = () => setSpeaking(false);
+        u.onerror = (e) => {
+          console.error("Speech Synthesis Error Event:", e);
+          setSpeaking(false);
+        };
+
+        window.speechSynthesis.speak(u);
+      } catch (err) {
+        console.error("Failed to execute TTS:", err);
+        setSpeaking(false);
+      }
+    }, 60);
+  };
+
   const stopSpeak = () => { 
-    window.speechSynthesis?.cancel(); 
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel(); 
+    }
     setSpeaking(false); 
   };
 
@@ -334,14 +375,14 @@ useEffect(() => {
 
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
 
-          {/* ── Visual Media Player (Now synced to "speaking" state) ── */}
+          {/* Media Player */}
           <VideoPlayer 
             wonder={wonder} 
             videoUrl={isCustom ? undefined : (wonder as WonderData).videoUrl} 
             isMuted={speaking} 
           />
 
-          {/* ── Guide Panel ── */}
+          {/* Guide Panel */}
           <div className="flex flex-col gap-4">
 
             {/* Guide Profile */}
@@ -366,11 +407,16 @@ useEffect(() => {
               <button
                 type="button"
                 onClick={() => { 
-                  if (speaking) stopSpeak(); 
-                  else if (topic) speak(topic.narration); 
+                  if (speaking) {
+                    stopSpeak(); 
+                  } else if (topic) {
+                    speak(topic.narration);
+                  } else if (wonder.topics.history) {
+                    // Default fallback if play clicked before selecting a topic explicitly
+                    openTopic("history");
+                  }
                 }}
-                disabled={!topic}
-                className="grid h-10 w-10 place-items-center rounded-full bg-white text-black disabled:opacity-40 transition"
+                className="grid h-10 w-10 place-items-center rounded-full bg-white text-black transition hover:scale-105 active:scale-95"
                 title={speaking ? "Pause" : "Play narration"}
               >
                 {speaking ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
