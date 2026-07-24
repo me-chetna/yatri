@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { SideNav } from "../../components/SideNav";
 import { WONDERS, type WonderData, type CultureTopic } from "../../data/monuments-data";
-import { getMonumentCulture, getNarrationAudio, type CultureInfo, type TopicData } from "./actions";
+import { getMonumentCulture, type CultureInfo, type TopicData } from "./actions";
 
 const TOPIC_META: Record<CultureTopic, { label: string; color: string }> = {
   history: { label: "History",        color: "#60a5fa" },
@@ -153,103 +153,67 @@ export default function WondersPage() {
   const [wonder, setWonder] = useState<WonderData | CultureInfo>(WONDERS[0]);
   const [activeTopic, setActiveTopic] = useState<CultureTopic | null>(null);
   const [speaking, setSpeaking] = useState(false);
-  const [audioLoading, setAudioLoading] = useState(false);
+  const [loadingAudio, setLoadingAudio] = useState(false);
   const [imageModal, setImageModal] = useState<{ url: string; alt: string } | null>(null);
-
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioCacheRef = useRef<Map<string, string>>(new Map());
-  const currentNarrationRef = useRef<string | null>(null);
   
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingCustom, setLoadingCustom] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Set up the narration <audio> element once.
-  // We deliberately do NOT use window.speechSynthesis: WebView-wrapped apps
-  // (Median, GoNative, etc.) generally ship with no native TTS engine, so
-  // speechSynthesis.speak() silently does nothing there even though it
-  // works fine in a real desktop/mobile browser. A real <audio> element
-  // playing a server-generated file works identically everywhere.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    const audio = new Audio();
-    audio.preload = "auto";
-    audioRef.current = audio;
+  // Stop current playing audio
+  const stopSpeak = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setSpeaking(false);
+    setLoadingAudio(false);
+  };
 
-    audio.onplay = () => setSpeaking(true);
-    audio.onpause = () => setSpeaking(false);
-    audio.onended = () => setSpeaking(false);
-    audio.onerror = () => {
-      console.error("Audio playback error for narration.");
+  // Real Audio Stream Execution (100% Median WebView Compatible)
+  const speak = async (text: string) => {
+    stopSpeak();
+
+    if (!text) return;
+
+    setLoadingAudio(true);
+
+    try {
+      const audioUrl = `/api/tts?text=${encodeURIComponent(text)}`;
+      const newAudio = new Audio(audioUrl);
+      audioRef.current = newAudio;
+
+      newAudio.oncanplaythrough = () => {
+        setLoadingAudio(false);
+        setSpeaking(true);
+        newAudio.play().catch((err) => {
+          console.error("Playback prevented:", err);
+          setSpeaking(false);
+        });
+      };
+
+      newAudio.onended = () => {
+        setSpeaking(false);
+      };
+
+      newAudio.onerror = (e) => {
+        console.error("Audio Load Error:", e);
+        setLoadingAudio(false);
+        setSpeaking(false);
+      };
+    } catch (err) {
+      console.error("TTS Fetch Error:", err);
+      setLoadingAudio(false);
       setSpeaking(false);
-      setAudioLoading(false);
-    };
+    }
+  };
 
-    return () => {
-      audio.pause();
-      audio.src = "";
-      audioRef.current = null;
-    };
-  }, []);
-
-  // 2. Stop speaking on wonder changes
   useEffect(() => {
     stopSpeak();
     setActiveTopic(null);
   }, [wonder]);
-
-  // Fetches (or reuses a cached) narration clip from the server and plays it.
-  const speak = async (text: string) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    // Stop whatever might currently be playing.
-    audio.pause();
-    setSpeaking(false);
-
-    try {
-      let src = audioCacheRef.current.get(text);
-
-      if (!src) {
-        setAudioLoading(true);
-        src = await getNarrationAudio(text);
-        audioCacheRef.current.set(text, src);
-      }
-
-      currentNarrationRef.current = text;
-      audio.src = src;
-      setAudioLoading(false);
-      await audio.play();
-    } catch (err) {
-      console.error("Failed to play narration:", err);
-      setAudioLoading(false);
-      setSpeaking(false);
-      setError(err instanceof Error ? err.message : "Couldn't play the narration audio.");
-    }
-  };
-
-  // Resumes the currently loaded clip if it's the same narration, otherwise
-  // fetches it fresh. Used by the play/pause button so re-pressing play
-  // after a pause doesn't restart the clip from the beginning.
-  const resumeOrSpeak = async (text: string) => {
-    const audio = audioRef.current;
-    if (audio && currentNarrationRef.current === text && audio.src) {
-      try {
-        await audio.play();
-      } catch (err) {
-        console.error("Failed to resume narration:", err);
-        setSpeaking(false);
-      }
-      return;
-    }
-    await speak(text);
-  };
-
-  const stopSpeak = () => {
-    audioRef.current?.pause();
-    setSpeaking(false);
-  };
 
   const openTopic = (t: CultureTopic) => {
     setActiveTopic(t);
@@ -380,8 +344,8 @@ export default function WondersPage() {
                 <p className="text-xs uppercase tracking-wider text-white/50">Your guide</p>
                 <p className="font-display text-lg text-white">Meera</p>
                 <p className="text-xs text-white/60">
-                  {audioLoading
-                    ? "Preparing voice…"
+                  {loadingAudio
+                    ? "Loading audio..."
                     : speaking
                       ? "Narrating…"
                       : topic
@@ -391,25 +355,25 @@ export default function WondersPage() {
               </div>
               <button
                 type="button"
-                disabled={audioLoading}
                 onClick={() => { 
-                  if (speaking) {
+                  if (speaking || loadingAudio) {
                     stopSpeak(); 
                   } else if (topic) {
-                    resumeOrSpeak(topic.narration);
+                    speak(topic.narration);
                   } else if (wonder.topics.history) {
-                    // Default fallback if play clicked before selecting a topic explicitly
                     openTopic("history");
                   }
                 }}
-                className="grid h-10 w-10 place-items-center rounded-full bg-white text-black transition hover:scale-105 active:scale-95 disabled:opacity-60"
+                className="grid h-10 w-10 place-items-center rounded-full bg-white text-black transition hover:scale-105 active:scale-95 disabled:opacity-50"
                 title={speaking ? "Pause" : "Play narration"}
               >
-                {audioLoading
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : speaking
-                    ? <Pause className="h-4 w-4" />
-                    : <Play className="h-4 w-4" />}
+                {loadingAudio ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-black" />
+                ) : speaking ? (
+                  <Pause className="h-4 w-4" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
               </button>
             </div>
 
