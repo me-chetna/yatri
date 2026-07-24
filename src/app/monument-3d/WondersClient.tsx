@@ -160,24 +160,42 @@ export default function WondersPage() {
   const [loadingCustom, setLoadingCustom] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Reference for active HTMLAudioElement
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Track ongoing speech session ID to discard async callbacks from cancelled play calls
+  const speechIdRef = useRef<number>(0);
 
-  // Stop current playing audio
+  // Thoroughly stop and clean up current audio state
   const stopSpeak = () => {
+    speechIdRef.current += 1; // Invalidate any pending async callbacks
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+      audioRef.current.oncanplaythrough = null;
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current.src = "";
+      audioRef.current = null;
     }
     setSpeaking(false);
     setLoadingAudio(false);
   };
 
-  // Real Audio Stream Execution (100% Median WebView Compatible)
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopSpeak();
+    };
+  }, []);
+
+  // Real Audio Stream Execution
   const speak = async (text: string) => {
+    // Kill existing playback immediately
     stopSpeak();
 
     if (!text) return;
 
+    // Increment speech session ID for race condition protection
+    const currentSpeechId = ++speechIdRef.current;
     setLoadingAudio(true);
 
     try {
@@ -186,27 +204,38 @@ export default function WondersPage() {
       audioRef.current = newAudio;
 
       newAudio.oncanplaythrough = () => {
+        // If a new speech request was triggered while loading, cancel this one
+        if (speechIdRef.current !== currentSpeechId) return;
+
         setLoadingAudio(false);
         setSpeaking(true);
         newAudio.play().catch((err) => {
           console.error("Playback prevented:", err);
-          setSpeaking(false);
+          if (speechIdRef.current === currentSpeechId) {
+            setSpeaking(false);
+          }
         });
       };
 
       newAudio.onended = () => {
-        setSpeaking(false);
+        if (speechIdRef.current === currentSpeechId) {
+          setSpeaking(false);
+        }
       };
 
       newAudio.onerror = (e) => {
         console.error("Audio Load Error:", e);
-        setLoadingAudio(false);
-        setSpeaking(false);
+        if (speechIdRef.current === currentSpeechId) {
+          setLoadingAudio(false);
+          setSpeaking(false);
+        }
       };
     } catch (err) {
       console.error("TTS Fetch Error:", err);
-      setLoadingAudio(false);
-      setSpeaking(false);
+      if (speechIdRef.current === currentSpeechId) {
+        setLoadingAudio(false);
+        setSpeaking(false);
+      }
     }
   };
 
