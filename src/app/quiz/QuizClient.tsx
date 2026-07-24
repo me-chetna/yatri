@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from "react";
-import { Compass, RotateCcw, ArrowRight, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Compass, RotateCcw, ArrowRight, Sparkles, MapPin, IndianRupee, Calendar } from "lucide-react";
 
 type Option = {
   label: string;
@@ -14,6 +14,25 @@ type Question = {
   text: string;
   options: Option[];
 };
+
+interface Destination {
+  id: string;
+  name: string;
+  state: string;
+  avgBudgetPerDayINR: number;
+  cheapestSeason: string;
+  tags: {
+    climate: string;
+    terrain: string;
+    activity: string;
+    food: string;
+    vibe: string;
+    stay: string;
+  };
+  description: string;
+  tagTitle: string;
+  bg: string;
+}
 
 const QUIZ_QUESTIONS: Question[] = [
   {
@@ -108,43 +127,234 @@ const QUIZ_QUESTIONS: Question[] = [
   }
 ];
 
-function getRecommendation(answers: string[]) {
-  const counts = answers.reduce((acc, val) => {
-    acc[val] = (acc[val] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+const ALL_INDIAN_DESTINATIONS: Destination[] = [
+  // NORTH INDIA
+  {
+    id: "kasol-hp",
+    name: "Kasol & Parvati Valley",
+    state: "Himachal Pradesh",
+    avgBudgetPerDayINR: 900,
+    cheapestSeason: "March - May",
+    tags: { climate: "cold", terrain: "mountain", activity: "adventure", food: "hearty", vibe: "solo", stay: "hostel" },
+    description: "Pine-forested valleys, backpacker riverside hostels, and picturesque Himalayan trails at unbeatable prices.",
+    tagTitle: "Alpine Nomad 🏔️",
+    bg: "from-sky-500/20 via-blue-500/10 to-transparent border-sky-300 dark:border-sky-900/50 text-sky-950 dark:text-sky-200"
+  },
+  {
+    id: "mcleodganj-hp",
+    name: "Dharamshala & Bir Billing",
+    state: "Himachal Pradesh",
+    avgBudgetPerDayINR: 1100,
+    cheapestSeason: "March - June",
+    tags: { climate: "cold", terrain: "mountain", activity: "adventure", food: "hearty", vibe: "solo", stay: "hostel" },
+    description: "Tibetan culture, world-famous paragliding spots, and budget-friendly hillside cafes.",
+    tagTitle: "Sky Explorer 🪂",
+    bg: "from-sky-500/20 via-blue-500/10 to-transparent border-sky-300 dark:border-sky-900/50 text-sky-950 dark:text-sky-200"
+  },
+  {
+    id: "rishikesh-uk",
+    name: "Rishikesh & Lansdowne",
+    state: "Uttarakhand",
+    avgBudgetPerDayINR: 850,
+    cheapestSeason: "September - November",
+    tags: { climate: "cold", terrain: "mountain", activity: "adventure", food: "spicy", vibe: "solo", stay: "hostel" },
+    description: "Yoga capitals, affordable Ganges river rafting camps, and tranquil pine forest trails.",
+    tagTitle: "Spiritual Adventurer 🧘🏽‍♂️",
+    bg: "from-indigo-500/20 via-blue-500/10 to-transparent border-indigo-300 dark:border-indigo-900/50 text-indigo-950 dark:text-indigo-200"
+  },
+  {
+    id: "pahalgam-jk",
+    name: "Pahalgam & Aru Valley",
+    state: "Jammu & Kashmir",
+    avgBudgetPerDayINR: 1600,
+    cheapestSeason: "April - June",
+    tags: { climate: "cold", terrain: "mountain", activity: "relaxation", food: "hearty", vibe: "romantic", stay: "cabin" },
+    description: "Lush alpine meadows, crystal-clear mountain streams, and cozy wooden homestays.",
+    tagTitle: "Valley Wanderer 🌲",
+    bg: "from-blue-500/20 via-cyan-500/10 to-transparent border-blue-300 dark:border-blue-900/50 text-blue-950 dark:text-blue-200"
+  },
+  {
+    id: "leh-ladakh",
+    name: "Leh & Nubra Valley",
+    state: "Ladakh",
+    avgBudgetPerDayINR: 2000,
+    cheapestSeason: "May - July",
+    tags: { climate: "cold", terrain: "mountain", activity: "adventure", food: "hearty", vibe: "solo", stay: "hostel" },
+    description: "High-altitude cold deserts, ancient monasteries, and breathtaking mountain passes.",
+    tagTitle: "High Pass Voyager 🚵🏽",
+    bg: "from-slate-500/20 via-sky-500/10 to-transparent border-slate-300 dark:border-slate-800 text-slate-950 dark:text-slate-200"
+  },
 
-  if (counts["cold"] || counts["mountain"] || counts["cabin"]) {
-    return {
-      name: "Leh-Ladakh & Himachal Ranges",
-      description: "You thrive in majestic alpine atmospheres. Think winding snow passes, serene high-altitude monasteries, cozy cabins, and warm hearty local stews.",
-      tag: "Alpine Adventurer 🏔️",
-      bg: "from-sky-500/20 via-blue-500/10 to-transparent border-sky-300 dark:border-sky-900/50 text-sky-950 dark:text-sky-200"
-    };
+  // WEST INDIA
+  {
+    id: "pushkar-rj",
+    name: "Pushkar & Bundi",
+    state: "Rajasthan",
+    avgBudgetPerDayINR: 800,
+    cheapestSeason: "July - October",
+    tags: { climate: "warm", terrain: "history", activity: "culture", food: "spicy", vibe: "solo", stay: "hostel" },
+    description: "Sacred lake ghats, royal stepwells, and ultra-cheap heritage guesthouses.",
+    tagTitle: "Heritage Seeker 📜",
+    bg: "from-amber-500/20 via-orange-500/10 to-transparent border-amber-300 dark:border-amber-900/50 text-amber-900 dark:text-amber-200"
+  },
+  {
+    id: "jaisalmer-rj",
+    name: "Jaisalmer Golden Fort",
+    state: "Rajasthan",
+    avgBudgetPerDayINR: 1100,
+    cheapestSeason: "October - March",
+    tags: { climate: "warm", terrain: "history", activity: "culture", food: "spicy", vibe: "family", stay: "hostel" },
+    description: "Living sandstone fort, desert dunes, and vibrant folk cultural showcases.",
+    tagTitle: "Desert Monarch 🏰",
+    bg: "from-amber-500/20 via-orange-500/10 to-transparent border-amber-300 dark:border-amber-900/50 text-amber-900 dark:text-amber-200"
+  },
+  {
+    id: "diu-ut",
+    name: "Diu Island & Daman",
+    state: "Daman and Diu",
+    avgBudgetPerDayINR: 1000,
+    cheapestSeason: "November - February",
+    tags: { climate: "warm", terrain: "beach", activity: "relaxation", food: "seafood", vibe: "family", stay: "hostel" },
+    description: "Portuguese sea forts, peaceful golden beaches, and affordable coastal retreats.",
+    tagTitle: "Island Escapist ⛵",
+    bg: "from-teal-500/20 via-cyan-500/10 to-transparent border-teal-300 dark:border-teal-900/50 text-teal-950 dark:text-teal-200"
+  },
+
+  // SOUTH INDIA
+  {
+    id: "gokarna-ka",
+    name: "Gokarna & Kudle Beach",
+    state: "Karnataka",
+    avgBudgetPerDayINR: 1000,
+    cheapestSeason: "October - March",
+    tags: { climate: "warm", terrain: "beach", activity: "relaxation", food: "seafood", vibe: "solo", stay: "hostel" },
+    description: "Tranquil beach shacks, pristine coastline, and a peaceful alternative to commercial crowds.",
+    tagTitle: "Coastal Nomad 🏖️",
+    bg: "from-teal-500/20 via-emerald-500/10 to-transparent border-teal-300 dark:border-teal-900/50 text-teal-950 dark:text-teal-200"
+  },
+  {
+    id: "hampi-ka",
+    name: "Hampi Boulder Valley",
+    state: "Karnataka",
+    avgBudgetPerDayINR: 950,
+    cheapestSeason: "November - February",
+    tags: { climate: "warm", terrain: "history", activity: "culture", food: "spicy", vibe: "solo", stay: "hostel" },
+    description: "Surreal boulder landscapes, Vijayanagara empire ruins, and budget-friendly backpacker cafes.",
+    tagTitle: "Ancient Pioneer 🗿",
+    bg: "from-orange-500/20 via-amber-500/10 to-transparent border-orange-300 dark:border-orange-900/50 text-orange-950 dark:text-orange-200"
+  },
+  {
+    id: "varkala-kl",
+    name: "Varkala Cliff & Munroe Island",
+    state: "Kerala",
+    avgBudgetPerDayINR: 1200,
+    cheapestSeason: "June - September (Monsoon)",
+    tags: { climate: "tropical", terrain: "beach", activity: "relaxation", food: "seafood", vibe: "romantic", stay: "hostel" },
+    description: "Red ocean cliffs, serene backwater canal homestays, and fresh coastal seafood.",
+    tagTitle: "Tropical Dreamer 🥥",
+    bg: "from-emerald-500/20 via-teal-500/10 to-transparent border-emerald-300 dark:border-emerald-900/50 text-emerald-950 dark:text-emerald-200"
+  },
+  {
+    id: "pondicherry-py",
+    name: "Puducherry & Auroville",
+    state: "Puducherry",
+    avgBudgetPerDayINR: 1100,
+    cheapestSeason: "October - March",
+    tags: { climate: "warm", terrain: "beach", activity: "relaxation", food: "seafood", vibe: "romantic", stay: "hostel" },
+    description: "French Quarter cobblestone streets, beach promenades, and serene spiritual retreats.",
+    tagTitle: "French Quarter Flâneur ☕",
+    bg: "from-rose-500/20 via-pink-500/10 to-transparent border-rose-300 dark:border-rose-900/50 text-rose-950 dark:text-rose-200"
+  },
+  {
+    id: "araku-ap",
+    name: "Araku Valley",
+    state: "Andhra Pradesh",
+    avgBudgetPerDayINR: 950,
+    cheapestSeason: "September - February",
+    tags: { climate: "cold", terrain: "mountain", activity: "relaxation", food: "spicy", vibe: "family", stay: "cabin" },
+    description: "Aromatic coffee plantations, Eastern Ghats hill trails, and limestone caves.",
+    tagTitle: "Highland Retreat 🌿",
+    bg: "from-green-500/20 via-emerald-500/10 to-transparent border-green-300 dark:border-green-900/50 text-green-950 dark:text-green-200"
+  },
+
+  // EAST & NORTH-EAST INDIA
+  {
+    id: "cherrapunji-ml",
+    name: "Sohra & Mawlynnong",
+    state: "Meghalaya",
+    avgBudgetPerDayINR: 1300,
+    cheapestSeason: "September - November",
+    tags: { climate: "tropical", terrain: "mountain", activity: "adventure", food: "hearty", vibe: "solo", stay: "cabin" },
+    description: "Living root bridges, cloud-filled valleys, and eco-friendly indigenous village stays.",
+    tagTitle: "Cloud Valley Trekker 🌧️",
+    bg: "from-teal-500/20 via-cyan-500/10 to-transparent border-teal-300 dark:border-teal-900/50 text-teal-950 dark:text-teal-200"
+  },
+  {
+    id: "puri-or",
+    name: "Gopalpur-on-Sea & Puri",
+    state: "Odisha",
+    avgBudgetPerDayINR: 800,
+    cheapestSeason: "All Year Round",
+    tags: { climate: "warm", terrain: "beach", activity: "culture", food: "seafood", vibe: "family", stay: "hostel" },
+    description: "Quiet uncrowded beaches, ancient coastal temples, and ultra-cheap fresh seafood stalls.",
+    tagTitle: "Coastal Pilgrim 🌊",
+    bg: "from-cyan-500/20 via-blue-500/10 to-transparent border-cyan-300 dark:border-cyan-900/50 text-cyan-950 dark:text-cyan-200"
+  },
+  {
+    id: "darjeeling-wb",
+    name: "Darjeeling & Kalimpong",
+    state: "West Bengal",
+    avgBudgetPerDayINR: 1100,
+    cheapestSeason: "March - May",
+    tags: { climate: "cold", terrain: "mountain", activity: "culture", food: "hearty", vibe: "family", stay: "hostel" },
+    description: "Majestic Kanchenjunga views, historic tea gardens, and vibrant mountain toy train heritage.",
+    tagTitle: "Tea Garden Escapist 🍃",
+    bg: "from-emerald-500/20 via-green-500/10 to-transparent border-emerald-300 dark:border-emerald-900/50 text-emerald-950 dark:text-emerald-200"
+  },
+
+  // CENTRAL INDIA
+  {
+    id: "orchha-mp",
+    name: "Orchha & Khajuraho",
+    state: "Madhya Pradesh",
+    avgBudgetPerDayINR: 850,
+    cheapestSeason: "October - March",
+    tags: { climate: "warm", terrain: "history", activity: "culture", food: "spicy", vibe: "solo", stay: "hostel" },
+    description: "Betwa river cenotaphs, majestic palatial architecture, and quiet riverside camping.",
+    tagTitle: "Palace Explorer 🏰",
+    bg: "from-amber-500/20 via-yellow-500/10 to-transparent border-amber-300 dark:border-amber-900/50 text-amber-900 dark:text-amber-200"
   }
-  if (counts["beach"] || counts["seafood"] || counts["relaxation"]) {
-    return {
-      name: "The Coastlines of Goa & Kerala",
-      description: "The ocean is calling you. Your perfect match includes fresh maritime coastal cuisines, sunset walks under high palms, and unwinding at your own slow, relaxed pace.",
-      tag: "Coastal Nomad 🏖️",
-      bg: "from-teal-500/20 via-emerald-500/10 to-transparent border-teal-300 dark:border-teal-900/50 text-teal-950 dark:text-teal-200"
-    };
-  }
-  if (counts["history"] || counts["culture"] || counts["palaces"]) {
-    return {
-      name: "Imperial Rajasthan (Jaipur & Udaipur)",
-      description: "You appreciate deep cultural ancestry. Get ready to explore royal pink-stone palaces, vibrant street bazaars, and traditional performance arts.",
-      tag: "Heritage Seeker 📜",
-      bg: "from-amber-500/20 via-orange-500/10 to-transparent border-amber-300 dark:border-amber-900/50 text-amber-900 dark:text-amber-200"
-    };
+];
+
+function calculateBestDestination(answers: string[]) {
+  const answerSet = new Set(answers);
+  let bestMatch: Destination = ALL_INDIAN_DESTINATIONS[0];
+  let highestScore = -1;
+
+  for (const dest of ALL_INDIAN_DESTINATIONS) {
+    let score = 0;
+
+    // 1. Tag Match Scoring
+    Object.values(dest.tags).forEach((tagValue) => {
+      if (answerSet.has(tagValue)) {
+        score += 10;
+      }
+    });
+
+    // 2. Affordability / Cheapest Option Priority
+    if (dest.avgBudgetPerDayINR <= 900) {
+      score += 8; // Highest bonus for ultra-cheap options
+    } else if (dest.avgBudgetPerDayINR <= 1300) {
+      score += 4;
+    }
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = dest;
+    }
   }
 
-  return {
-    name: "The Western Ghats & Coorg Highlands",
-    description: "You appreciate a perfect equilibrium. A mix of rich misty coffee plantations, ancient heritage trails, local culinary gems, and fresh balanced weather.",
-    tag: "Mindful Explorer 🌿",
-    bg: "from-purple-500/20 via-indigo-500/10 to-transparent border-purple-300 dark:border-purple-900/50 text-purple-950 dark:text-purple-200"
-  };
+  return bestMatch;
 }
 
 // Background Floating Items Configuration
@@ -166,7 +376,6 @@ export default function QuizClient() {
   function handleSelect(value: string) {
     if (isExiting) return;
     
-    // Trigger deck throw animation sequence
     setIsExiting(true);
     
     setTimeout(() => {
@@ -179,7 +388,7 @@ export default function QuizClient() {
         setIsFinished(true);
       }
       setIsExiting(false);
-    }, 350); // Matches sliding transition speed
+    }, 350);
   }
 
   function restartQuiz() {
@@ -189,7 +398,7 @@ export default function QuizClient() {
     setIsExiting(false);
   }
 
-  const recommendation = isFinished ? getRecommendation(answers) : null;
+  const recommendation = isFinished ? calculateBestDestination(answers) : null;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[var(--background)] to-[color-mix(in_oklab,var(--sand)_30%,transparent)] px-5 py-12 sm:px-6">
@@ -218,7 +427,7 @@ export default function QuizClient() {
             Match Your Travel DNA
           </h1>
           <p className="mt-2 text-xs sm:text-sm text-[var(--muted-foreground)] max-w-sm">
-            Answer the interactive deck below to discover your next destination checkpoint.
+            Answer the interactive deck below to unlock your budget-friendly destination in India.
           </p>
         </div>
 
@@ -269,7 +478,7 @@ export default function QuizClient() {
                     </h2>
                   </div>
 
-                  {/* Enhanced Option Buttons with Micro-actions */}
+                  {/* Option Buttons */}
                   <div className="mt-8 space-y-3">
                     {q.options.map((opt) => (
                       <button
@@ -297,14 +506,30 @@ export default function QuizClient() {
           <div className={`rounded-[38px] border bg-gradient-to-b p-6 sm:p-10 text-center shadow-2xl border-[color-mix(in_oklab,var(--ink)_8%,transparent)] backdrop-blur-xl animate-in fade-in zoom-in-95 duration-500 ${recommendation?.bg}`}>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--card)] border border-white/20 dark:border-black/20 px-4 py-1.5 text-xs font-extrabold uppercase tracking-widest shadow-xs mb-4">
               <Sparkles className="h-3 w-3 text-amber-500 animate-spin-slow" />
-              {recommendation?.tag}
+              {recommendation?.tagTitle}
             </span>
+
             <h2 className="text-display text-3xl font-black tracking-tight text-[var(--ink)] sm:text-4xl">
               {recommendation?.name}
             </h2>
+
+            <p className="mt-1 flex items-center justify-center gap-1 text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+              <MapPin className="h-3.5 w-3.5 text-[var(--primary)]" /> {recommendation?.state}
+            </p>
+
             <p className="mt-4 text-sm leading-relaxed text-[var(--muted-foreground)] font-medium max-w-sm mx-auto">
               {recommendation?.description}
             </p>
+
+            {/* Budget & Best Season Chips */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-xl bg-[var(--card)] border border-[color-mix(in_oklab,var(--ink)_10%,transparent)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] shadow-xs">
+                <IndianRupee className="h-3.5 w-3.5 text-emerald-600" /> ~₹{recommendation?.avgBudgetPerDayINR}/day
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-xl bg-[var(--card)] border border-[color-mix(in_oklab,var(--ink)_10%,transparent)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] shadow-xs">
+                <Calendar className="h-3.5 w-3.5 text-sky-600" /> {recommendation?.cheapestSeason}
+              </span>
+            </div>
 
             <div className="mt-10 pt-6 border-t border-[color-mix(in_oklab,var(--ink)_8%,transparent)] flex justify-center">
               <button

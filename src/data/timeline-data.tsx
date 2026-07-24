@@ -132,10 +132,10 @@ export const TIMELINE_WONDERS_IMAGES: Record<string, Record<number, string>> = {
     2026: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Taj_Mahal_%28south_view%2C_2006%29.jpg/960px-Taj_Mahal_%28south_view%2C_2006%29.jpg"
   },
   red_fort: {
-    1632: "https://tltxxu1td9jw4ezp.public.blob.vercel-storage.com/1640-rf.jpeg",
-    1653: "https://tltxxu1td9jw4ezp.public.blob.vercel-storage.com/1740-rf.jpeg",
-    1857: "https://tltxxu1td9jw4ezp.public.blob.vercel-storage.com/1840-rf.jpg",
-    1908: "https://pbs.twimg.com/media/DkjBfiVU0AAgfMT.jpg",
+    1648: "https://tltxxu1td9jw4ezp.public.blob.vercel-storage.com/1640-rf.jpeg",
+    1739: "https://tltxxu1td9jw4ezp.public.blob.vercel-storage.com/1740-rf.jpeg",
+    1858: "https://tltxxu1td9jw4ezp.public.blob.vercel-storage.com/1840-rf.jpg",
+    1947: "https://pbs.twimg.com/media/DkjBfiVU0AAgfMT.jpg",
     2026: "https://cdn.britannica.com/20/189820-050-D650A54D/Red-Fort-Old-Delhi-India.jpg"
   },
   india_gate: {

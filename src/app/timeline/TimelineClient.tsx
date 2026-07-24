@@ -14,6 +14,7 @@ import {
 
 function findStaticWonderId(name: string): string | null {
   const norm = name.toLowerCase().trim();
+  if (norm.includes("taj mahal") || norm.includes("taj")) return "taj_mahal";
   if (norm.includes("red fort") || norm.includes("lal qila") || norm.includes("lal quila")) return "red_fort";
   if (norm.includes("india gate")) return "india_gate";
   return null;

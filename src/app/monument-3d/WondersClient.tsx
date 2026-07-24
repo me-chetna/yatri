@@ -179,36 +179,49 @@ export default function WondersPage() {
   const [loadingCustom, setLoadingCustom] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const handle = () => setVoiceReady(true);
-    window.speechSynthesis.onvoiceschanged = handle;
-    if (window.speechSynthesis.getVoices().length > 0) setVoiceReady(true);
-    return () => { 
-      window.speechSynthesis.onvoiceschanged = null; 
-      window.speechSynthesis.cancel(); 
-    };
-  }, []);
+useEffect(() => {
+  const unlockAudio = () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      const emptyUtterance = new SpeechSynthesisUtterance("");
+      window.speechSynthesis.speak(emptyUtterance);
+    }
+    window.removeEventListener("touchstart", unlockAudio);
+    window.removeEventListener("click", unlockAudio);
+  };
 
-  useEffect(() => {
-    window.speechSynthesis?.cancel();
-    setSpeaking(false);
-    setActiveTopic(null);
-  }, [wonder]);
+  window.addEventListener("touchstart", unlockAudio);
+  window.addEventListener("click", unlockAudio);
+
+  return () => {
+    window.removeEventListener("touchstart", unlockAudio);
+    window.removeEventListener("click", unlockAudio);
+  };
+}, []);
 
   const speak = (text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  
+  window.speechSynthesis.cancel();
+
+  // Small timeout lets the WebView reset speech context properly
+  setTimeout(() => {
     const u = new SpeechSynthesisUtterance(text);
     const v = pickFemaleVoice();
     if (v) u.voice = v;
-    u.rate = 0.97; u.pitch = 1.12;
-    u.onstart = () => setSpeaking(true);
-    u.onend   = () => setSpeaking(false);
-    u.onerror = () => setSpeaking(false);
-    window.speechSynthesis.speak(u);
-  };
+    
+    u.rate = 0.95;
+    u.pitch = 1.0;
 
+    u.onstart = () => setSpeaking(true);
+    u.onend = () => setSpeaking(false);
+    u.onerror = (e) => {
+      console.error("TTS Error:", e);
+      setSpeaking(false);
+    };
+
+    window.speechSynthesis.speak(u);
+  }, 50);
+};
   const stopSpeak = () => { 
     window.speechSynthesis?.cancel(); 
     setSpeaking(false); 
