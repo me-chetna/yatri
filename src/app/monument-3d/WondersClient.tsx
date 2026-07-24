@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { SideNav } from "../../components/SideNav";
 import { WONDERS, type WonderData, type CultureTopic } from "../../data/monuments-data";
-import { getMonumentCulture, type CultureInfo, type TopicData } from "./actions";
+import { getMonumentCulture, getNarrationAudio, type CultureInfo, type TopicData } from "./actions";
 
 const TOPIC_META: Record<CultureTopic, { label: string; color: string }> = {
   history: { label: "History",        color: "#60a5fa" },
@@ -29,25 +29,6 @@ const TOPIC_META: Record<CultureTopic, { label: string; color: string }> = {
 const TOPIC_ORDER: CultureTopic[] = [
   "history", "past", "culture", "cuisine", "food", "dance", "dress",
 ];
-
-// Reliable Voice Picker with fallback support
-function pickFemaleVoice(): SpeechSynthesisVoice | null {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
-  const voices = window.speechSynthesis.getVoices();
-  if (!voices || voices.length === 0) return null;
-
-  const preferred = [
-    /samantha/i, /zira/i, /karen/i, /victoria/i, /tessa/i,
-    /heera|priya|veena|aditi|raveena/i, /female/i, /google.*(uk|us).*english/i,
-  ];
-
-  for (const re of preferred) {
-    const v = voices.find((v) => re.test(v.name));
-    if (v) return v;
-  }
-  
-  return voices.find((v) => v.lang.startsWith("en")) ?? voices[0] ?? null;
-}
 
 function ImageModal({ imageUrl, imageAlt, onClose }: {
   imageUrl: string; imageAlt: string; onClose: () => void;
@@ -172,44 +153,43 @@ export default function WondersPage() {
   const [wonder, setWonder] = useState<WonderData | CultureInfo>(WONDERS[0]);
   const [activeTopic, setActiveTopic] = useState<CultureTopic | null>(null);
   const [speaking, setSpeaking] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
   const [imageModal, setImageModal] = useState<{ url: string; alt: string } | null>(null);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCacheRef = useRef<Map<string, string>>(new Map());
+  const currentNarrationRef = useRef<string | null>(null);
   
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingCustom, setLoadingCustom] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Pre-warm voice synthesis engine & populate voices list
+  // 1. Set up the narration <audio> element once.
+  // We deliberately do NOT use window.speechSynthesis: WebView-wrapped apps
+  // (Median, GoNative, etc.) generally ship with no native TTS engine, so
+  // speechSynthesis.speak() silently does nothing there even though it
+  // works fine in a real desktop/mobile browser. A real <audio> element
+  // playing a server-generated file works identically everywhere.
   useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (typeof window === "undefined") return;
 
-    // Force voice list initialization
-    const loadVoices = () => {
-      window.speechSynthesis.getVoices();
+    const audio = new Audio();
+    audio.preload = "auto";
+    audioRef.current = audio;
+
+    audio.onplay = () => setSpeaking(true);
+    audio.onpause = () => setSpeaking(false);
+    audio.onended = () => setSpeaking(false);
+    audio.onerror = () => {
+      console.error("Audio playback error for narration.");
+      setSpeaking(false);
+      setAudioLoading(false);
     };
-
-    loadVoices();
-    if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.onvoiceschanged = loadVoices;
-    }
-
-    // iOS & Android WebView Audio Context Unlocker on First Touch/Click
-    const unlockAudio = () => {
-      if ("speechSynthesis" in window) {
-        const dummyUtterance = new SpeechSynthesisUtterance("");
-        dummyUtterance.volume = 0;
-        window.speechSynthesis.speak(dummyUtterance);
-      }
-      window.removeEventListener("touchstart", unlockAudio);
-      window.removeEventListener("click", unlockAudio);
-    };
-
-    window.addEventListener("touchstart", unlockAudio);
-    window.addEventListener("click", unlockAudio);
 
     return () => {
-      window.removeEventListener("touchstart", unlockAudio);
-      window.removeEventListener("click", unlockAudio);
-      window.speechSynthesis.cancel();
+      audio.pause();
+      audio.src = "";
+      audioRef.current = null;
     };
   }, []);
 
@@ -219,53 +199,56 @@ export default function WondersPage() {
     setActiveTopic(null);
   }, [wonder]);
 
-  // Robust Speech Execution Function
-  const speak = (text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      console.warn("Speech Synthesis is not supported in this browser environment.");
-      return;
-    }
+  // Fetches (or reuses a cached) narration clip from the server and plays it.
+  const speak = async (text: string) => {
+    const audio = audioRef.current;
+    if (!audio) return;
 
-    // Force stop any ongoing audio
-    window.speechSynthesis.cancel();
+    // Stop whatever might currently be playing.
+    audio.pause();
+    setSpeaking(false);
 
-    // Give browser/webview engine a 60ms tick to reset audio channel
-    setTimeout(() => {
-      try {
-        const u = new SpeechSynthesisUtterance(text);
-        const v = pickFemaleVoice();
+    try {
+      let src = audioCacheRef.current.get(text);
 
-        if (v) {
-          u.voice = v;
-          u.lang = v.lang;
-        } else {
-          u.lang = "en-US";
-        }
-
-        u.rate = 0.95;
-        u.pitch = 1.05;
-        u.volume = 1.0;
-
-        u.onstart = () => setSpeaking(true);
-        u.onend = () => setSpeaking(false);
-        u.onerror = (e) => {
-          console.error("Speech Synthesis Error Event:", e);
-          setSpeaking(false);
-        };
-
-        window.speechSynthesis.speak(u);
-      } catch (err) {
-        console.error("Failed to execute TTS:", err);
-        setSpeaking(false);
+      if (!src) {
+        setAudioLoading(true);
+        src = await getNarrationAudio(text);
+        audioCacheRef.current.set(text, src);
       }
-    }, 60);
+
+      currentNarrationRef.current = text;
+      audio.src = src;
+      setAudioLoading(false);
+      await audio.play();
+    } catch (err) {
+      console.error("Failed to play narration:", err);
+      setAudioLoading(false);
+      setSpeaking(false);
+      setError(err instanceof Error ? err.message : "Couldn't play the narration audio.");
+    }
   };
 
-  const stopSpeak = () => { 
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel(); 
+  // Resumes the currently loaded clip if it's the same narration, otherwise
+  // fetches it fresh. Used by the play/pause button so re-pressing play
+  // after a pause doesn't restart the clip from the beginning.
+  const resumeOrSpeak = async (text: string) => {
+    const audio = audioRef.current;
+    if (audio && currentNarrationRef.current === text && audio.src) {
+      try {
+        await audio.play();
+      } catch (err) {
+        console.error("Failed to resume narration:", err);
+        setSpeaking(false);
+      }
+      return;
     }
-    setSpeaking(false); 
+    await speak(text);
+  };
+
+  const stopSpeak = () => {
+    audioRef.current?.pause();
+    setSpeaking(false);
   };
 
   const openTopic = (t: CultureTopic) => {
@@ -397,29 +380,36 @@ export default function WondersPage() {
                 <p className="text-xs uppercase tracking-wider text-white/50">Your guide</p>
                 <p className="font-display text-lg text-white">Meera</p>
                 <p className="text-xs text-white/60">
-                  {speaking
-                    ? "Narrating…"
-                    : topic
-                      ? `Telling you about ${TOPIC_META[activeTopic!].label}`
-                      : `Ready for ${isCustom ? (wonder as CultureInfo).monument : wonder.name}`}
+                  {audioLoading
+                    ? "Preparing voice…"
+                    : speaking
+                      ? "Narrating…"
+                      : topic
+                        ? `Telling you about ${TOPIC_META[activeTopic!].label}`
+                        : `Ready for ${isCustom ? (wonder as CultureInfo).monument : wonder.name}`}
                 </p>
               </div>
               <button
                 type="button"
+                disabled={audioLoading}
                 onClick={() => { 
                   if (speaking) {
                     stopSpeak(); 
                   } else if (topic) {
-                    speak(topic.narration);
+                    resumeOrSpeak(topic.narration);
                   } else if (wonder.topics.history) {
                     // Default fallback if play clicked before selecting a topic explicitly
                     openTopic("history");
                   }
                 }}
-                className="grid h-10 w-10 place-items-center rounded-full bg-white text-black transition hover:scale-105 active:scale-95"
+                className="grid h-10 w-10 place-items-center rounded-full bg-white text-black transition hover:scale-105 active:scale-95 disabled:opacity-60"
                 title={speaking ? "Pause" : "Play narration"}
               >
-                {speaking ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                {audioLoading
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : speaking
+                    ? <Pause className="h-4 w-4" />
+                    : <Play className="h-4 w-4" />}
               </button>
             </div>
 
